@@ -8,7 +8,7 @@ from datetime import datetime
 # 0. ALPHA_SOC CONFIG & SYSTEM CSS
 # ---------------------------------------------------
 st.set_page_config(
-    page_title="ALPHA_SOC_V5",
+    page_title="Shadow's Trade Ledger",
     layout="wide",
     page_icon="⚡"
 )
@@ -97,7 +97,7 @@ else:
 # ---------------------------------------------------
 # 3. INTERFACE HEADER
 # ---------------------------------------------------
-st.title("⚡ ALPHA_SOC // OPERATIONAL COMMAND")
+st.title("⚡ Shadow's Trade Ledger")
 t1, t2, t3, t4 = st.tabs(["📊 Analytics", "📥 Entry", "🧮 Risk", "🛠️ Maintenance"])
 
 # ===================================================
