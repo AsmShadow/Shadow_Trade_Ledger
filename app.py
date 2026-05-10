@@ -231,8 +231,7 @@ with t4:
     # Security Gate
     with st.expander("🔐 Authorize Purge Protocol"):
         auth_pass = st.text_input("Admin Auth Code", type="password")
-        # Change 'admin123' to whatever secret password you want
-        if auth_pass == "admin123":
+        if auth_pass == "12911Abc_@#":
             del_id = st.number_input("ID to Purge", step=1, value=0)
             if st.button("EXECUTE PERMANENT WIPE"):
                 if del_id > 0:
