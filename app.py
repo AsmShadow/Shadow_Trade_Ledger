@@ -28,8 +28,6 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-DB_FILE = "trading_data_v2.csv"
-
 
 # Initialize secure connection to Cloud Database
 conn = st.connection("supabase", type=SupabaseConnection)
