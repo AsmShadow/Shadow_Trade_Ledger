@@ -36,12 +36,19 @@ conn = st.connection("supabase", type=SupabaseConnection)
 
 # --- 2. DATA ENGINE ---
 def load_data():
-    # Fetch all rows from Supabase
-    rows = conn.query("*", table="trading_ledger", ttl="10m").execute()
-    if rows.data:
-        return pd.DataFrame(rows.data)
-    # Return empty template if database is new
-    return pd.DataFrame(columns=["date", "ticker", "platform", "strategy", "type", "entry_price", "stop_loss", "exit_price", "fees", "net_pl", "r_multiple", "status", "followed_plan", "emotion"])
+    # Fetch all rows directly using the native Supabase client
+    response = conn.client.table("trading_ledger").select("*").execute()
+    
+    # Check if there is data
+    if response.data:
+        return pd.DataFrame(response.data)
+        
+    # Return empty template if database is empty/new
+    return pd.DataFrame(columns=[
+        "date", "ticker", "platform", "strategy", "type", "entry_price", 
+        "stop_loss", "exit_price", "fees", "net_pl", "r_multiple", 
+        "status", "followed_plan", "emotion"
+    ])
 
 def save_trade(trade_dict):
     # Push new trade directly to Supabase cloud
