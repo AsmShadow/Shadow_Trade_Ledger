@@ -35,6 +35,11 @@ DB_FILE = "trading_data_v2.csv"
 conn = st.connection("supabase", type=SupabaseConnection)
 
 # --- 2. DATA ENGINE ---
+from st_supabase_connection import SupabaseConnection
+
+# Initialize secure connection to Cloud Database
+conn = st.connection("supabase", type=SupabaseConnection)
+
 def load_data():
     # Fetch all rows directly using the native Supabase client
     response = conn.client.table("trading_ledger").select("*").execute()
