@@ -2,432 +2,186 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from st_supabase_connection import SupabaseConnection
+from datetime import datetime
 
 # ---------------------------------------------------
-# PAGE CONFIG
+# PAGE CONFIG & THEME
 # ---------------------------------------------------
-
-st.set_page_config(
-    page_title="ALPHA_SOC_TRADING",
-    layout="wide",
-    page_icon="⚡"
-)
-
-# ---------------------------------------------------
-# CUSTOM CSS
-# ---------------------------------------------------
+st.set_page_config(page_title="ALPHA_SOC_V4", layout="wide", page_icon="⚡")
 
 st.markdown("""
 <style>
-.main {
-    background-color: #0b0e14;
-}
-
-.stMetric {
-    background: rgba(255, 255, 255, 0.05);
-    padding: 15px;
-    border-radius: 10px;
-    border: 1px solid rgba(0, 255, 204, 0.2);
-}
-
-.stButton > button {
-    width: 100%;
-    background-color: #00ffcc !important;
-    color: black !important;
-    font-weight: bold;
-}
+    .main { background-color: #0b0e14; }
+    .stMetric { 
+        background: rgba(255, 255, 255, 0.05); 
+        padding: 15px; border-radius: 10px; 
+        border: 1px solid rgba(0, 255, 204, 0.2); 
+    }
+    .stButton>button {
+        width: 100%; background-color: #00ffcc !important;
+        color: black !important; font-weight: bold;
+    }
+    [data-testid="stSidebar"] { background-color: #0e1117; border-right: 1px solid #1e2127; }
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------
-# SUPABASE CONNECTION
+# DATABASE CONNECTION
 # ---------------------------------------------------
-
 conn = st.connection("supabase", type=SupabaseConnection)
-
-# ---------------------------------------------------
-# DATABASE FUNCTIONS
-# ---------------------------------------------------
 
 def load_data():
     try:
-        response = (
-            conn.client
-            .table("trading_ledger")
-            .select("*")
-            .execute()
-        )
-
+        response = conn.client.table("trading_ledger").select("*").execute()
         if response.data:
-            df = pd.DataFrame(response.data)
-            return df
-
+            return pd.DataFrame(response.data)
         return pd.DataFrame()
-
     except Exception as e:
-        st.error("Database connection failed.")
-        st.exception(e)
+        st.error("Terminal Connection Lost. Check Supabase Link.")
         return pd.DataFrame()
-
 
 def save_trade(trade_dict):
     try:
         conn.client.table("trading_ledger").insert(trade_dict).execute()
         return True
-
     except Exception as e:
-        st.error("Failed to save trade.")
-        st.exception(e)
+        st.error(f"Write Access Denied: {e}")
         return False
 
 # ---------------------------------------------------
-# UI HEADER
+# SIDEBAR FILTERS
 # ---------------------------------------------------
+st.sidebar.title("🕹️ SOC_FILTERS")
+raw_df = load_data()
 
-st.title("⚡ ALPHA_SOC // TRADING OPERATIONS")
+if not raw_df.empty:
+    all_tickers = raw_df["ticker"].unique().tolist()
+    selected_tickers = st.sidebar.multiselect("Asset Focus", all_tickers, default=all_tickers)
+    df = raw_df[raw_df["ticker"].isin(selected_tickers)]
+else:
+    df = raw_df
 
-tab1, tab2, tab3 = st.tabs([
-    "📊 Analytics Dashboard",
-    "📥 Log Operation",
-    "🧮 Risk Calculator"
-])
+# ---------------------------------------------------
+# HEADER
+# ---------------------------------------------------
+st.title("⚡ ALPHA_SOC // OPERATIONAL COMMAND")
+tab1, tab2, tab3 = st.tabs(["📊 Analytics", "📥 Entry", "🧮 Risk"])
 
 # ===================================================
 # TAB 1 — ANALYTICS
 # ===================================================
-
 with tab1:
-
-    df = load_data()
-
     if not df.empty:
-
-        # -------------------------
-        # METRICS
-        # -------------------------
-
+        # Calculations
         total_pl = df["net_pl"].sum()
-
         wins = df[df["status"] == "Win"]["net_pl"].sum()
-
-        losses = abs(
-            df[df["status"] == "Loss"]["net_pl"].sum()
-        )
-
-        profit_factor = (
-            wins / losses if losses != 0 else wins
-        )
-
-        win_rate = (
-            len(df[df["status"] == "Win"]) / len(df)
-        ) * 100
-
+        losses = abs(df[df["status"] == "Loss"]["net_pl"].sum())
+        profit_factor = wins / losses if losses != 0 else wins
+        win_rate = (len(df[df["status"] == "Win"]) / len(df)) * 100
         avg_r = df["r_multiple"].mean()
 
-        # -------------------------
-        # METRIC CARDS
-        # -------------------------
-
+        # Metrics Row
         m1, m2, m3, m4 = st.columns(4)
-
-        m1.metric(
-            "TOTAL NET P/L",
-            f"${total_pl:.2f}"
-        )
-
-        m2.metric(
-            "WIN RATE",
-            f"{win_rate:.1f}%"
-        )
-
-        m3.metric(
-            "PROFIT FACTOR",
-            f"{profit_factor:.2f}"
-        )
-
-        m4.metric(
-            "AVG R-MULTIPLE",
-            f"{avg_r:.2f}R"
-        )
-
-        # -------------------------
-        # CHARTS
-        # -------------------------
+        m1.metric("NET ALPHA", f"${total_pl:.2f}", delta=f"{total_pl:.2f}")
+        m2.metric("WIN RATE", f"{win_rate:.1f}%", delta=f"{win_rate-50:.1f}%" if win_rate != 50 else None)
+        m3.metric("PROFIT FACTOR", f"{profit_factor:.2f}")
+        m4.metric("AVG RISK_REWARD", f"{avg_r:.2f}R")
 
         col_left, col_right = st.columns([2, 1])
 
         with col_left:
-
-            st.subheader("Equity Curve")
-
+            st.subheader("Equity Trajectory")
             df["equity"] = df["net_pl"].cumsum()
-
-            fig = px.area(
-                df,
-                x=df.index,
-                y="equity",
-                template="plotly_dark"
-            )
-
-            fig.update_traces(
-                line_color="#00ffcc",
-                fillcolor="rgba(0,255,204,0.1)"
-            )
-
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
+            fig = px.area(df, x=df.index, y="equity", template="plotly_dark")
+            fig.update_traces(line_color="#00ffcc", fillcolor="rgba(0,255,204,0.1)")
+            fig.add_hline(y=0, line_dash="dash", line_color="#ff4b4b", opacity=0.5)
+            st.plotly_chart(fig, use_container_width=True)
 
         with col_right:
+            st.subheader("AI Operational Review")
+            # Logic-based analysis of your discipline
+            discipline_score = (len(df[df["followed_plan"] == "Yes"]) / len(df)) * 100
+            
+            if discipline_score > 80:
+                st.success(f"**Discipline: {discipline_score:.0f}%**\nExecution is optimal. You are trading the plan, not the P/L.")
+            elif discipline_score > 50:
+                st.warning(f"**Discipline: {discipline_score:.0f}%**\nDeviation detected. Emotional leaks (FOMO/Revenge) are impacting the edge.")
+            else:
+                st.error(f"**Discipline: {discipline_score:.0f}%**\nCRITICAL: You are gambling. Stop trading until discipline is restored.")
 
-            st.subheader("Strategy Performance")
+            # Top Emotion Analysis
+            top_emotion = df["emotion"].mode()[0]
+            st.info(f"**Dominant State:** {top_emotion}")
 
-            strat_perf = (
-                df.groupby("strategy")["net_pl"]
-                .sum()
-                .reset_index()
-            )
-
-            fig_bar = px.bar(
-                strat_perf,
-                x="strategy",
-                y="net_pl",
-                template="plotly_dark",
-                color="net_pl"
-            )
-
-            st.plotly_chart(
-                fig_bar,
-                use_container_width=True
-            )
-
-        # -------------------------
-        # TABLE
-        # -------------------------
-
-        st.subheader("📜 Trade History")
-
-        st.dataframe(
-            df.sort_index(ascending=False),
-            use_container_width=True
-        )
-
+        st.subheader("📜 Detailed Ledger")
+        st.dataframe(df.sort_index(ascending=False), use_container_width=True)
     else:
-        st.info("No trading data found.")
+        st.info("System Standby. Awaiting first operational input.")
 
 # ===================================================
 # TAB 2 — LOG TRADE
 # ===================================================
-
 with tab2:
-
-    st.subheader("Log New Trade")
-
+    st.subheader("Manual Data Uplink")
     with st.form("trade_form"):
-
         c1, c2, c3 = st.columns(3)
-
-        date = c1.date_input("Trade Date")
-
-        ticker = c2.text_input("Ticker")
-
-        platform = c3.selectbox(
-            "Platform",
-            ["Kraken", "MEXC", "Trading212", "Binance"]
-        )
+        date = c1.date_input("Date")
+        ticker = c2.text_input("Ticker (e.g. SUIUSDT.P)")
+        platform = c3.selectbox("Source Platform", ["Kraken", "MEXC", "Trading212", "Binance"])
 
         c4, c5, c6 = st.columns(3)
-
-        strategy = c4.selectbox(
-            "Strategy",
-            [
-                "Scalping",
-                "Breakout",
-                "Trend Following",
-                "ICT/SMC"
-            ]
-        )
-
-        t_type = c5.radio(
-            "Type",
-            ["Long", "Short"],
-            horizontal=True
-        )
-
-        emotion = c6.select_slider(
-            "Emotion",
-            options=[
-                "Fear",
-                "Anxious",
-                "Neutral",
-                "Calm",
-                "Greed"
-            ]
-        )
+        strategy = c4.selectbox("Tactical Strategy", ["Scalping", "Breakout", "Trend Following", "ICT/SMC"])
+        t_type = c5.radio("Side", ["Long", "Short"], horizontal=True)
+        emotion = c6.select_slider("State of Mind", options=["Fear", "Anxious", "Neutral", "Calm", "Greed"])
 
         c7, c8, c9, c10 = st.columns(4)
+        quantity = c7.number_input("Units/Quantity", value=1.0, step=0.1)
+        entry = c8.number_input("Entry", step=0.0001, format="%.4f")
+        stop = c9.number_input("Stop Loss", step=0.0001, format="%.4f")
+        exit_price = c10.number_input("Exit Price", step=0.0001, format="%.4f")
 
-        entry = c7.number_input(
-            "Entry Price",
-            step=0.0001,
-            format="%.4f"
-        )
+        fees = st.number_input("Operational Fees", value=0.10)
+        plan = st.selectbox("Protocol Adherence?", ["Yes", "Partially", "No - FOMO", "No - Revenge Trade"])
 
-        stop = c8.number_input(
-            "Stop Loss",
-            step=0.0001,
-            format="%.4f"
-        )
-
-        exit_price = c9.number_input(
-            "Exit Price",
-            step=0.0001,
-            format="%.4f"
-        )
-
-        fees = c10.number_input(
-            "Fees",
-            value=0.10
-        )
-
-        plan = st.selectbox(
-            "Followed Plan?",
-            [
-                "Yes",
-                "Partially",
-                "No - FOMO",
-                "No - Revenge Trade"
-            ]
-        )
-
-        submitted = st.form_submit_button(
-            "COMMIT OPERATION TO LEDGER"
-        )
-
-        if submitted:
-
-            # -----------------------------------
-            # TRADE CALCULATIONS
-            # -----------------------------------
-
+        if st.form_submit_button("COMMIT TO CLOUD"):
+            # Math Logic
             if t_type == "Long":
-
-                net_pl = (
-                    (exit_price - entry) * 100
-                ) - fees
-
-                r_multiple = (
-                    (exit_price - entry)
-                    / (entry - stop)
-                    if entry != stop else 0
-                )
-
+                net_pl = ((exit_price - entry) * quantity) - fees
+                r_multiple = (exit_price - entry) / abs(entry - stop) if entry != stop else 0
             else:
+                net_pl = ((entry - exit_price) * quantity) - fees
+                r_multiple = (entry - exit_price) / abs(stop - entry) if entry != stop else 0
 
-                net_pl = (
-                    (entry - exit_price) * 100
-                ) - fees
-
-                r_multiple = (
-                    (entry - exit_price)
-                    / (stop - entry)
-                    if entry != stop else 0
-                )
-
-            # -----------------------------------
-            # STATUS
-            # -----------------------------------
-
-            if net_pl > 0:
-                status = "Win"
-
-            elif net_pl < 0:
-                status = "Loss"
-
-            else:
-                status = "Break-even"
-
-            # -----------------------------------
-            # SAVE TO DATABASE
-            # -----------------------------------
+            status = "Win" if net_pl > 0 else "Loss" if net_pl < 0 else "Break-even"
 
             trade_data = {
-                "date": str(date),
-                "ticker": ticker,
-                "platform": platform,
-                "strategy": strategy,
-                "type": t_type,
-                "entry_price": entry,
-                "stop_loss": stop,
-                "exit_price": exit_price,
-                "fees": fees,
-                "net_pl": net_pl,
-                "r_multiple": r_multiple,
-                "status": status,
-                "followed_plan": plan,
-                "emotion": emotion
+                "date": str(date), "ticker": ticker, "platform": platform, "strategy": strategy,
+                "type": t_type, "entry_price": entry, "stop_loss": stop, "exit_price": exit_price,
+                "quantity": quantity, "fees": fees, "net_pl": net_pl, "r_multiple": r_multiple,
+                "status": status, "followed_plan": plan, "emotion": emotion
             }
 
-            success = save_trade(trade_data)
-
-            if success:
-                st.success("Trade logged successfully.")
+            if save_trade(trade_data):
+                st.success("Operation Logged.")
                 st.rerun()
 
 # ===================================================
 # TAB 3 — RISK CALCULATOR
 # ===================================================
-
 with tab3:
+    st.subheader("🧮 Tactical Planning")
+    ca, cb = st.columns(2)
+    acc_size = ca.number_input("War Chest ($)", value=100.0)
+    risk_pct = ca.slider("Risk Exposure (%)", 0.5, 5.0, 1.0)
+    e_calc = cb.number_input("Planned Entry ", value=1.0000, format="%.4f")
+    s_calc = cb.number_input("Planned Stop ", value=0.9500, format="%.4f")
 
-    st.subheader("🧮 Position Size Calculator")
-
-    col_a, col_b = st.columns(2)
-
-    account_size = col_a.number_input(
-        "Account Balance ($)",
-        value=100.0
-    )
-
-    risk_percent = col_a.slider(
-        "Risk per Trade (%)",
-        0.5,
-        5.0,
-        1.0
-    )
-
-    entry_calc = col_b.number_input(
-        "Planned Entry",
-        value=1.0000,
-        format="%.4f"
-    )
-
-    stop_calc = col_b.number_input(
-        "Planned Stop",
-        value=0.9500,
-        format="%.4f"
-    )
-
-    risk_amount = (
-        account_size * (risk_percent / 100)
-    )
-
-    distance = abs(entry_calc - stop_calc)
-
-    if distance > 0:
-
-        position_size = risk_amount / distance
-
-        st.success(
-            f"Recommended Position Size: {position_size:.2f} units"
-        )
-
-        st.info(
-            f"Total Risk Amount: ${risk_amount:.2f}"
-        )
-
+    risk_usd = acc_size * (risk_pct / 100)
+    dist = abs(e_calc - s_calc)
+    
+    if dist > 0:
+        recommended_q = risk_usd / dist
+        st.success(f"**Loadout:** {recommended_q:.2f} Units")
+        st.info(f"**Exposure:** ${risk_usd:.2f}")
     else:
-        st.warning(
-            "Stop loss must not equal entry price."
-        )
+        st.warning("Define operational floor (Stop Loss).")
